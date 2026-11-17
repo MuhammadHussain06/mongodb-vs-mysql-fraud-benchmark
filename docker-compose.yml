@@ -1,0 +1,41 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: seg2102-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: frauddb
+    command: --innodb-buffer-pool-size=512M
+    ports:
+      - "3306:3306"
+    # Same CPU, memory and cache size for both databases
+    cpus: 2
+    mem_limit: 2g
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpass"]
+      interval: 5s
+      retries: 20
+
+  mongo:
+    image: mongo:7.0
+    container_name: seg2102-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpass
+    command: --wiredTigerCacheSizeGB 0.5
+    ports:
+      - "27017:27017"
+    cpus: 2
+    mem_limit: 2g
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      retries: 20
+
+volumes:
+  mysql-data:
+  mongo-data:

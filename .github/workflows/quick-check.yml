@@ -1,0 +1,74 @@
+# Runs the quick check on a small synthetic dataset to confirm the pipeline works end to end.
+# Timings from GitHub runners are not used in the report.
+name: Quick check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quick-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: frauddb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -prootpass"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mongo:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: rootpass
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping: 1}).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate sample data
+        run: python make_sample_data.py --rows 20000 --out data/sample.csv
+
+      - name: Run quick check
+        shell: bash
+        run: ROWS=20000 CSV=data/sample.csv bash quick_check.sh | tee quick_check.log
+
+      - name: Add headline results to job summary
+        if: always()
+        shell: bash
+        run: |
+          echo '### Quick check headline results' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          sed -n '/===== Headline results/,$p' quick_check.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results_quick
+          path: results_quick/
