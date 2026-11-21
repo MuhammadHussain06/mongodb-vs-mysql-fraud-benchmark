@@ -141,7 +141,7 @@ Options:
 | | `--reps` | 100 | Repetitions for indexed lookups and inserts |
 | | `--slow-reps` | 20 | Repetitions for unindexed lookups and full scans |
 
-A full run takes roughly 30–60 minutes depending on hardware.
+A full run takes about 5 minutes on the test machine below; slower hardware will take longer.
 
 ## Quick reproducibility check
 
@@ -177,6 +177,8 @@ CI confirms the code runs end to end and the result and integrity checks pass. I
 ## Output
 
 All output is written to the project's own `results/` folder (or `results_quick/` for the quick check), regardless of where the scripts are run from.
+
+The committed `results/` folder holds the results reported in the paper: three full runs on an Intel i9-14900HX laptop (16 GB RAM) running Ubuntu on WSL2 (8 GB, 16 CPUs). New runs are appended to these CSVs, so move or delete them first to start a fresh set.
 
 | File | Contents |
 |---|---|
