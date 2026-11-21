@@ -8,6 +8,12 @@ import pandas as pd
 
 from common import RESULTS_DIR, SYSTEM_LABELS
 
+# Sized for an IEEE two-column page: 3.5 in single column, 7.1 in full width
+plt.rcParams.update({"font.size": 8, "axes.titlesize": 8, "legend.fontsize": 7,
+                     "xtick.labelsize": 7, "ytick.labelsize": 7})
+COL_W, FULL_W = 3.5, 7.1
+SHORT_LABELS = {"mysql": "MySQL", "mongo_basic": "MongoDB\n(basic)", "mongo_bucket": "MongoDB\n(bucketed)"}
+
 FIG_DIR = os.path.join(RESULTS_DIR, "figures")
 SYSTEMS = list(SYSTEM_LABELS)
 QUERY_LABELS = {
@@ -33,9 +39,13 @@ def grouped_bars(ax, df, groups, value, group_labels):
     ax.set_xticklabels(group_labels)
 
 
+def size_label(rows):
+    return f"{rows // 1_000_000}M" if rows >= 1_000_000 else f"{rows // 1000}k"
+
+
 def save(fig, name):
     fig.tight_layout()
-    fig.savefig(os.path.join(FIG_DIR, name), dpi=200)
+    fig.savefig(os.path.join(FIG_DIR, name), dpi=300, bbox_inches="tight")
     plt.close(fig)
     print("Saved", os.path.join(FIG_DIR, name))
 
@@ -55,14 +65,19 @@ def main():
     max_rows = summary["rows"].max()
     indexed = summary[summary["indexed"]]
 
-    # Fig 1: latency vs data size, indexes on
+    # Fig 1: latency vs data size without indexes, where data size matters
+    unindexed = summary[~summary["indexed"]]
+    sizes = sorted(summary["rows"].unique())
     queries = ["history", "window_sum", "fraud_by_type"]
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    fig, axes = plt.subplots(1, 3, figsize=(FULL_W, 2.2))
     for ax, query in zip(axes, queries):
         for system in SYSTEMS:
-            d = indexed[(indexed["query"] == query) & (indexed["system"] == system)].sort_values("rows")
-            ax.plot(d["rows"], d["mean_ms"], marker="o", label=SYSTEM_LABELS[system])
-        ax.set_title(QUERY_LABELS[query])
+            d = unindexed[(unindexed["query"] == query) & (unindexed["system"] == system)].sort_values("rows")
+            ax.plot(d["rows"], d["mean_ms"], marker="o", markersize=3, label=SYSTEM_LABELS[system])
+        title = QUERY_LABELS[query] + (" (full scan)" if query == "fraud_by_type" else " (no index)")
+        ax.set_title(title)
+        ax.set_xticks(sizes)
+        ax.set_xticklabels([size_label(r) for r in sizes])
         ax.set_xlabel("Rows loaded")
         ax.set_ylabel("Mean latency (ms)")
         ax.grid(alpha=0.3)
@@ -73,13 +88,13 @@ def main():
     d = summary[(summary["rows"] == max_rows) & summary["query"].isin(["history", "window_sum"])].copy()
     d["group"] = d["query"] + "_" + d["indexed"].map({True: "on", False: "off"})
     groups = ["history_off", "history_on", "window_sum_off", "window_sum_on"]
-    labels = ["History\nno index", "History\nindexed", "Window sum\nno index", "Window sum\nindexed"]
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    labels = ["History\nno index", "History\nindexed", "Window\nno index", "Window\nindexed"]
+    fig, ax = plt.subplots(figsize=(COL_W, 2.6))
     grouped_bars(ax, d, groups, "mean_ms", labels)
     ax.set_yscale("log")
     ax.set_ylabel("Mean latency (ms, log scale)")
-    ax.set_title(f"Effect of indexing ({max_rows:,} rows)")
-    ax.legend()
+    ax.set_title(f"Effect of indexing ({size_label(max_rows)} rows)")
+    ax.legend(ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.22))
     ax.grid(axis="y", alpha=0.3)
     save(fig, "fig2_index_effect.png")
 
@@ -87,8 +102,8 @@ def main():
     d = loads.groupby(["rows", "system"])["seconds"].mean().reset_index()
     d["group"] = d["rows"]
     sizes = sorted(d["rows"].unique())
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    grouped_bars(ax, d, sizes, "seconds", [f"{s:,}" for s in sizes])
+    fig, ax = plt.subplots(figsize=(COL_W, 2.4))
+    grouped_bars(ax, d, sizes, "seconds", [size_label(s) for s in sizes])
     ax.set_xlabel("Rows loaded")
     ax.set_ylabel("Bulk load time (s)")
     ax.set_title("Bulk load time")
@@ -98,14 +113,14 @@ def main():
 
     # Fig 4: single insert latency at the largest size
     d = indexed[(indexed["rows"] == max_rows) & (indexed["query"] == "single_insert")]
-    fig, ax = plt.subplots(figsize=(6, 4.5))
+    fig, ax = plt.subplots(figsize=(COL_W, 2.4))
     x = range(len(SYSTEMS))
     ax.bar([i - 0.2 for i in x], [d.loc[d["system"] == s, "mean_ms"].mean() for s in SYSTEMS], 0.4, label="Mean")
     ax.bar([i + 0.2 for i in x], [d.loc[d["system"] == s, "p95_ms"].mean() for s in SYSTEMS], 0.4, label="p95")
     ax.set_xticks(list(x))
-    ax.set_xticklabels([SYSTEM_LABELS[s] for s in SYSTEMS])
+    ax.set_xticklabels([SHORT_LABELS[s] for s in SYSTEMS])
     ax.set_ylabel("Latency (ms)")
-    ax.set_title(f"Single durable insert ({max_rows:,} rows)")
+    ax.set_title(f"Single durable insert ({size_label(max_rows)} rows)")
     ax.legend()
     ax.grid(axis="y", alpha=0.3)
     save(fig, "fig4_single_insert.png")
@@ -113,12 +128,12 @@ def main():
     # Fig 5: storage at the largest size
     d = storage[storage["rows"] == max_rows].groupby("system")[["data_mb", "index_mb"]].mean()
     d = d.reindex(SYSTEMS)
-    fig, ax = plt.subplots(figsize=(6, 4.5))
-    labels = [SYSTEM_LABELS[s] for s in SYSTEMS]
+    fig, ax = plt.subplots(figsize=(COL_W, 2.4))
+    labels = [SHORT_LABELS[s] for s in SYSTEMS]
     ax.bar(labels, d["data_mb"], label="Data")
     ax.bar(labels, d["index_mb"], bottom=d["data_mb"], label="Indexes")
     ax.set_ylabel("Size on disk (MB)")
-    ax.set_title(f"Storage ({max_rows:,} rows)")
+    ax.set_title(f"Storage ({size_label(max_rows)} rows)")
     ax.legend()
     ax.grid(axis="y", alpha=0.3)
     save(fig, "fig5_storage.png")

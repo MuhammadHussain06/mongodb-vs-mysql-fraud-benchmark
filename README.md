@@ -184,7 +184,7 @@ All output is written to the project's own `results/` folder (or `results_quick/
 | `results/latency.csv` | Mean, p50 and p95 latency per run, size, system, query and index setting |
 | `results/storage.csv` | Data and index size (MB) per run, size and system |
 | `results/summary_latency.csv` | Latency averaged across runs |
-| `results/figures/fig1_latency_vs_size.png` | Query latency vs data size (indexed) |
+| `results/figures/fig1_latency_vs_size.png` | Query latency vs data size (unindexed lookups and full scan) |
 | `results/figures/fig2_index_effect.png` | Indexed vs unindexed lookups at the largest size |
 | `results/figures/fig3_load_time.png` | Bulk load time per size |
 | `results/figures/fig4_single_insert.png` | Single insert latency |
